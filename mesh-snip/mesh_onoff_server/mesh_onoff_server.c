@@ -1,5 +1,5 @@
 /*
-* Copyright 2019, Cypress Semiconductor Corporation or a subsidiary of
+* Copyright 2020, Cypress Semiconductor Corporation or a subsidiary of
 * Cypress Semiconductor Corporation. All Rights Reserved.
 *
 * This software, including source code, documentation and related
@@ -51,11 +51,6 @@
 extern wiced_bt_cfg_settings_t wiced_bt_cfg_settings;
 
 #define NUM_ONOFF_SERVERS       1
-#ifdef PTS
-// Application should have at least two elements in the PTS mode to pass PTS test Node Composition Refresh Procedure MESH/SR/RPR/PDU/BV-04-C
-#undef NUM_ONOFF_SERVERS
-#define NUM_ONOFF_SERVERS       2
-#endif
 #define TRANSITION_INTERVAL     100     // receive status notifications every 100ms during transition to new state
 
 // Needed to pass some PTS tests which require vendor model
@@ -277,12 +272,10 @@ void mesh_app_init(wiced_bool_t is_provisioned)
     wiced_bt_mesh_model_trace_enabled = WICED_TRUE;
 #endif
 #if 0
-#include "fid_app.h"
     // enable core trace
     extern void wiced_bt_mesh_core_set_trace_level(uint32_t fids_mask, uint8_t level);
     wiced_bt_mesh_core_set_trace_level(0xffffffff, 4);      //(ALL, TRACE_DEBUG)
-    wiced_bt_mesh_core_set_trace_level((1 << FID_MESH_APP__CORE_AES_CCM_C), 0);
-    wiced_bt_mesh_core_set_trace_level((1 << FID_MESH_APP__MESH_UTIL_C), 3);
+    wiced_bt_mesh_core_set_trace_level(0x4, 3);             //(CORE_AES_CCM_C, TRACE_INFO)
 #endif
 
     wiced_bt_cfg_settings.device_name = (uint8_t *)"OnOff Server";
@@ -308,17 +301,6 @@ void mesh_app_init(wiced_bool_t is_provisioned)
         wiced_bt_mesh_set_raw_scan_response_data(num_elem, adv_elem);
     }
 
-#ifdef PTS
-    // Application calls this function in the PTS mode to pass PTS test Node Composition Refresh Procedure MESH/SR/RPR/PDU/BV-04-C
-    // It deletes last element from Composition page 0
-    if (is_provisioned)
-    {
-        if (!wiced_bt_mesh_core_del_last_element())
-        {
-            WICED_BT_TRACE("Failed to delete last element\n");
-        }
-    }
-#endif
     memset (&app_state, 0, sizeof(app_state));
 
 #if REMOTE_PROVISION_SERVER_SUPPORTED

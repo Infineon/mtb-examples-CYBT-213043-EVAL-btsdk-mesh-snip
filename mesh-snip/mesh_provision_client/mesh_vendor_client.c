@@ -1,5 +1,5 @@
 /*
- * Copyright 2019, Cypress Semiconductor Corporation or a subsidiary of
+ * Copyright 2020, Cypress Semiconductor Corporation or a subsidiary of
  * Cypress Semiconductor Corporation. All Rights Reserved.
  *
  * This software, including source code, documentation and related
@@ -57,7 +57,7 @@
  *          Function Prototypes
  ******************************************************/
 static void mesh_vendor_client_send_data(wiced_bt_mesh_event_t *p_event, uint8_t opcode, uint8_t *p_data, uint16_t data_len);
-static void mesh_vendor_client_process_data(wiced_bt_mesh_event_t *p_event, uint8_t *p_data, uint16_t data_len);
+void mesh_vendor_client_process_data(wiced_bt_mesh_event_t *p_event, uint8_t *p_data, uint16_t data_len);
 
 #ifdef HCI_CONTROL
 static void mesh_vendor_hci_event_send_data(wiced_bt_mesh_hci_event_t *p_hci_event, uint16_t opcode, uint8_t *p_data, uint16_t data_len);
@@ -76,17 +76,7 @@ static void mesh_vendor_hci_event_send_data(wiced_bt_mesh_hci_event_t *p_hci_eve
  * was able to process the message, and FALSE if the message is unknown.  In the latter case the core
  * will call other registered models.
  */
-wiced_bool_t mesh_vendor_client_message_handler(wiced_bt_mesh_event_t *p_event, uint8_t *p_data, uint16_t data_len)
-{
-    WICED_BT_TRACE("mesh_vendor_client_message_handler: company_id:%04x opcode:%x model_id:%x\n", p_event->company_id, p_event->opcode, p_event->model_id);
-
-    // 0xffff model_id means request to check if that opcode belongs to that model
-    if (p_event->model_id == 0xffff)
-        return WICED_TRUE;
-
-    mesh_vendor_client_process_data(p_event, p_data, data_len);
-    return WICED_TRUE;
-}
+extern wiced_bool_t mesh_vendor_client_message_handler(wiced_bt_mesh_event_t *p_event, uint8_t *p_data, uint16_t data_len);
 
 void mesh_vendor_client_process_data(wiced_bt_mesh_event_t *p_event, uint8_t *p_data, uint16_t data_len)
 {

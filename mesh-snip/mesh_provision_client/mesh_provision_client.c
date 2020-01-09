@@ -1,5 +1,5 @@
 /*
- * Copyright 2019, Cypress Semiconductor Corporation or a subsidiary of
+ * Copyright 2020, Cypress Semiconductor Corporation or a subsidiary of
  * Cypress Semiconductor Corporation. All Rights Reserved.
  *
  * This software, including source code, documentation and related
@@ -157,6 +157,7 @@ static void mesh_app_init(wiced_bool_t is_provisioned);
 static uint32_t mesh_app_proc_rx_cmd(uint16_t opcode, uint8_t *p_data, uint32_t length);
 static void mesh_config_client_message_handler(uint16_t event, wiced_bt_mesh_event_t *p_event, void *p_data);
 static uint8_t mesh_provisioner_process_set_local_device(uint8_t *p_data, uint32_t length);
+static uint8_t mesh_provisioner_process_add_vendor_model(uint8_t *p_data, uint32_t length);
 static uint8_t mesh_provisioner_process_set_dev_key(uint8_t *p_data, uint32_t length);
 static uint8_t mesh_provisioner_process_connect(wiced_bt_mesh_event_t *p_event, uint8_t *p_data, uint32_t length);
 static uint8_t mesh_provisioner_process_disconnect(wiced_bt_mesh_event_t *p_event, uint8_t *p_data, uint32_t length);
@@ -268,6 +269,21 @@ uint8_t mesh_system_id[8]                                                  = { 0
 
 extern wiced_transport_buffer_pool_t* host_trans_pool;
 
+/*
+* Structure to save vendor-specific model data
+*/
+typedef struct
+{
+    uint8_t element_index;
+    uint16_t company_id;
+    uint16_t model_id;
+    uint8_t num_opcodes;
+    uint8_t *p_opcodes;
+} wiced_bt_mesh_vendor_specific_model_t;
+
+#define MESH_APP_MESH_MAX_VENDOR_MODELS 10
+static wiced_bt_mesh_vendor_specific_model_t vendor_model_data[MESH_APP_MESH_MAX_VENDOR_MODELS] = {0};
+
 wiced_bool_t mesh_vendor_client_message_handler(wiced_bt_mesh_event_t *p_event, const uint8_t *p_data, uint16_t data_len);
 
 wiced_bt_mesh_core_config_model_t   mesh_element1_models[] =
@@ -330,7 +346,17 @@ wiced_bt_mesh_core_config_model_t   mesh_element1_models[] =
     // This a client which assume to know all the keys, so we will allow
     // vendor commands from all the companies.
     { MESH_COMPANY_ID_UNUSED, 0, mesh_vendor_client_message_handler, NULL, NULL },
+    { MESH_COMPANY_ID_UNUSED, 0, mesh_vendor_client_message_handler, NULL, NULL },
+    { MESH_COMPANY_ID_UNUSED, 0, mesh_vendor_client_message_handler, NULL, NULL },
+    { MESH_COMPANY_ID_UNUSED, 0, mesh_vendor_client_message_handler, NULL, NULL },
+    { MESH_COMPANY_ID_UNUSED, 0, mesh_vendor_client_message_handler, NULL, NULL },
+    { MESH_COMPANY_ID_UNUSED, 0, mesh_vendor_client_message_handler, NULL, NULL },
+    { MESH_COMPANY_ID_UNUSED, 0, mesh_vendor_client_message_handler, NULL, NULL },
+    { MESH_COMPANY_ID_UNUSED, 0, mesh_vendor_client_message_handler, NULL, NULL },
+    { MESH_COMPANY_ID_UNUSED, 0, mesh_vendor_client_message_handler, NULL, NULL },
+    { MESH_COMPANY_ID_UNUSED, 0, mesh_vendor_client_message_handler, NULL, NULL },
 };
+
 #define MESH_APP_NUM_MODELS  (sizeof(mesh_element1_models) / sizeof(wiced_bt_mesh_core_config_model_t))
 
 #define MESH_PROVISIONER_CLIENT_ELEMENT_INDEX   0
@@ -787,6 +813,11 @@ uint32_t mesh_app_proc_rx_cmd(uint16_t opcode, uint8_t *p_data, uint32_t length)
 
     switch (opcode)
     {
+    case HCI_CONTROL_MESH_COMMAND_CONFIG_MODEL_ADD:
+        status = mesh_provisioner_process_add_vendor_model(p_data, length);
+        mesh_provisioner_hci_send_status(status);
+        return WICED_TRUE;
+
     case HCI_CONTROL_MESH_COMMAND_SET_LOCAL_DEVICE:
         status = mesh_provisioner_process_set_local_device(p_data, length);
         mesh_provisioner_hci_send_status(status);
@@ -1219,6 +1250,131 @@ uint8_t mesh_provisioner_process_set_dev_key(uint8_t *p_data, uint32_t length)
     STREAM_TO_UINT16(set.net_key_idx, p_data);
     wiced_bt_mesh_provision_set_dev_key(&set);
     return HCI_CONTROL_MESH_STATUS_SUCCESS;
+}
+
+uint8_t mesh_provisioner_process_add_vendor_model(uint8_t *p_data, uint32_t length)
+{
+    uint16_t company_id;
+    uint16_t model_id;
+    uint8_t i = 0;
+    uint8_t num_opcodes = 0;
+
+    // Find the empty block in the mesh_element1_models structure and save it
+    STREAM_TO_UINT16(company_id, p_data);
+    STREAM_TO_UINT16(model_id, p_data);
+    STREAM_TO_UINT8(num_opcodes, p_data);
+
+    WICED_BT_TRACE("mesh_provisioner_process_add_vendor_model: company_id:%04x model_id:%x num_opcodes:%x \n", company_id, model_id, num_opcodes);
+
+    // Find empty block to add vendor model
+    wiced_bool_t b_found = WICED_FALSE;
+    for(i = 0; i < MESH_APP_NUM_MODELS; i++)
+    {
+        if(mesh_element1_models[i].company_id != MESH_COMPANY_ID_UNUSED)
+            continue;
+
+        b_found = WICED_TRUE;
+        mesh_element1_models[i].company_id = company_id;
+        mesh_element1_models[i].model_id = model_id;
+        break;
+    }
+
+    if(!b_found)
+        return HCI_CONTROL_MESH_STATUS_ERROR;
+
+    uint8_t element_index = i;
+
+    // Find empty block for vendor model data
+    b_found = WICED_FALSE;
+    for(i = 0; i < MESH_APP_MESH_MAX_VENDOR_MODELS; i++)
+    {
+        if(vendor_model_data[i].company_id)
+            continue;
+        b_found = WICED_TRUE;
+        break;
+    }
+
+    if(!b_found)
+        return HCI_CONTROL_MESH_STATUS_ERROR;
+
+    //know where the element data is stored
+    vendor_model_data[i].element_index = element_index;
+    vendor_model_data[i].company_id = company_id;
+    vendor_model_data[i].model_id = model_id;
+    vendor_model_data[i].num_opcodes = num_opcodes;
+    vendor_model_data[i].p_opcodes = NULL;
+
+    if(num_opcodes)
+    {
+        // each vendor specific opcode is 3-bytes long
+        uint8_t* p_opcodes = wiced_bt_get_buffer(num_opcodes * 3);
+        if(p_opcodes)
+        {
+            vendor_model_data[i].p_opcodes = p_opcodes;
+            STREAM_TO_ARRAY(vendor_model_data[i].p_opcodes, p_data, num_opcodes * 3);
+        }
+        else
+            return HCI_CONTROL_MESH_STATUS_ERROR;
+    }
+
+    return HCI_CONTROL_MESH_STATUS_SUCCESS;
+}
+
+extern void mesh_vendor_client_process_data(wiced_bt_mesh_event_t *p_event, uint8_t *p_data, uint16_t data_len);
+
+/*
+ * This function is called when core receives a valid message for the define Vendor
+ * Model (MESH_VENDOR_COMPANY_ID/MESH_VENDOR_MODEL_ID) combination.  The function shall return TRUE if it
+ * was able to process the message, and FALSE if the message is unknown.  In the latter case the core
+ * will call other registered models.
+ */
+wiced_bool_t mesh_vendor_client_message_handler(wiced_bt_mesh_event_t *p_event,  const uint8_t *p_data, uint16_t data_len)
+{
+    uint8_t i = 0;
+    uint8_t j = 0;
+    uint8_t *p_op = NULL;
+    uint8_t num_opcodes = 0;
+
+    WICED_BT_TRACE("mesh_vendor_client_message_handler: company_id:%04x opcode:%x model_id:%x\n", p_event->company_id, p_event->opcode, p_event->model_id);
+
+    // model_id 0xffff means request to check if that opcode belongs to that model
+    if (p_event->model_id == 0xffff)
+    {
+        for(i = 0; i < MESH_APP_MESH_MAX_VENDOR_MODELS; i++)
+        {
+            if(vendor_model_data[i].company_id == p_event->company_id)
+            {
+                p_op = vendor_model_data[i].p_opcodes;
+                num_opcodes = vendor_model_data[i].num_opcodes;
+                if(num_opcodes)
+                {
+                    if(p_op)
+                    {
+                        for(j = 0; j < num_opcodes; j++)
+                        {
+                            // first byte is the opcode
+                            if(p_op[0] == p_event->opcode)
+                            {
+                                p_event->model_id = vendor_model_data[i].model_id;
+                                return WICED_TRUE;
+                            }
+                            else
+                                p_op += 3;
+                        }
+                    }
+                }
+                else
+                {
+                    p_event->model_id = vendor_model_data[i].model_id;
+                    return WICED_TRUE;
+                }
+            }
+        }
+        return WICED_FALSE;
+    }
+
+    mesh_vendor_client_process_data(p_event, (uint8_t*) p_data, data_len);
+    return WICED_TRUE;
 }
 
 /*
