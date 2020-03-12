@@ -1,5 +1,5 @@
 # Firmware ID (2 bytes company ID + 2 bytes Product ID + 2 bytes HW Version ID + 4 bytes FW Version)
-Firmware ID = 0x01313026000101010002
+Firmware ID = 0x01313016000201010002
 
 # Validation data to verify received image
 Validation Data = 0x0102E0F0

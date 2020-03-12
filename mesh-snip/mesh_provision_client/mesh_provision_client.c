@@ -143,7 +143,6 @@ wiced_bool_t mesh_gatt_client_local_device_set(wiced_bt_mesh_local_device_set_da
  ******************************************************/
 #define MESH_PID                0x301D
 #define MESH_VID                0x0002
-#define MESH_FWID               0x301D000101010001
 #define MESH_CACHE_REPLAY_SIZE  200
 
 /******************************************************
@@ -258,11 +257,6 @@ static void mesh_provisioner_hci_send_status(uint8_t status);
 /******************************************************
  *          Variables Definitions
  ******************************************************/
-#ifndef WICEDX
-// Use hardcoded PTS default priv key. In real app it will be generated once and written into OTP memory
-uint8_t pb_priv_key[WICED_BT_MESH_PROVISION_PRIV_KEY_LEN] = { 0x52, 0x9A, 0xA0, 0x67, 0x0D, 0x72, 0xCD, 0x64, 0x97, 0x50, 0x2E, 0xD4, 0x73, 0x50, 0x2B, 0x03, 0x7E, 0x88, 0x03, 0xB5, 0xC6, 0x08, 0x29, 0xA5, 0xA3, 0xCA, 0xA2, 0x19, 0x50, 0x55, 0x30, 0xBA };
-#endif
-
 uint8_t mesh_mfr_name[WICED_BT_MESH_PROPERTY_LEN_DEVICE_MANUFACTURER_NAME] = { 'C', 'y', 'p', 'r', 'e', 's', 's', 0 };
 uint8_t mesh_model_num[WICED_BT_MESH_PROPERTY_LEN_DEVICE_MODEL_NUMBER]     = { '1', '2', '3', '4', 0, 0, 0, 0 };
 uint8_t mesh_system_id[8]                                                  = { 0xbb, 0xb8, 0xa1, 0x80, 0x5f, 0x9f, 0x91, 0x71 };
@@ -284,7 +278,7 @@ typedef struct
 #define MESH_APP_MESH_MAX_VENDOR_MODELS 10
 static wiced_bt_mesh_vendor_specific_model_t vendor_model_data[MESH_APP_MESH_MAX_VENDOR_MODELS] = {0};
 
-wiced_bool_t mesh_vendor_client_message_handler(wiced_bt_mesh_event_t *p_event, const uint8_t *p_data, uint16_t data_len);
+wiced_bool_t mesh_vendor_client_message_handler(wiced_bt_mesh_event_t *p_event, uint8_t *p_data, uint16_t data_len);
 
 wiced_bt_mesh_core_config_model_t   mesh_element1_models[] =
 {
@@ -385,7 +379,6 @@ wiced_bt_mesh_core_config_t  mesh_config =
     .company_id         = MESH_COMPANY_ID_CYPRESS,                  // Company identifier assigned by the Bluetooth SIG
     .product_id         = MESH_PID,                                 // Vendor-assigned product identifier
     .vendor_id          = MESH_VID,                                 // Vendor-assigned product version identifier
-    .firmware_id        = MESH_FWID,                                // Vendor-assigned firmware version identifier
     .replay_cache_size  = MESH_CACHE_REPLAY_SIZE,                   // Number of replay protection entries, i.e. maximum number of mesh devices that can send application messages to this device.
     .features                  = 0,                                 // no relay, no friend, no proxy
     .friend_cfg         =                                           // Empty Configuration of the Friend Feature
@@ -434,19 +427,13 @@ extern void mesh_proxy_client_process_filter_status(wiced_bt_mesh_event_t *p_eve
 void mesh_app_init(wiced_bool_t is_provisioned)
 {
 #if 0
-    extern uint8_t wiced_bt_mesh_model_trace_enabled;
-    wiced_bt_mesh_model_trace_enabled = WICED_TRUE;
+    // Set Debug trace level for mesh_models_lib and mesh_provisioner_lib
+    wiced_bt_mesh_models_set_trace_level(WICED_BT_MESH_CORE_TRACE_INFO);
 #endif
 #if 0
-#include "fid_app.h"
-
-    // enable core trace
-    extern void wiced_bt_mesh_core_set_trace_level(uint32_t fids_mask, uint8_t level);
-
-    wiced_bt_mesh_core_set_trace_level(0xffffffff, 4);      //(ALL, TRACE_DEBUG)
-    wiced_bt_mesh_core_set_trace_level((1 << FID_MESH_APP__CORE_AES_CCM_C), 0);
-//    wiced_bt_mesh_core_set_trace_level((1 << FID_MESH_APP__PROVISIONING_C), 0);
-//    wiced_bt_mesh_core_set_trace_level((1 << FID_MESH_APP__PB_TRANSPORT_C), 0);
+    // Set Debug trace level for all modules but Info level for CORE_AES_CCM module
+    wiced_bt_mesh_core_set_trace_level(WICED_BT_MESH_CORE_TRACE_FID_ALL, WICED_BT_MESH_CORE_TRACE_DEBUG);
+    wiced_bt_mesh_core_set_trace_level(WICED_BT_MESH_CORE_TRACE_FID_CORE_AES_CCM, WICED_BT_MESH_CORE_TRACE_INFO);
 #endif
 
     wiced_bt_cfg_settings.device_name = (uint8_t *)"Provisioner Client";
@@ -584,7 +571,7 @@ void mesh_config_client_message_handler(uint16_t event, wiced_bt_mesh_event_t *p
     switch (event)
     {
     case WICED_BT_MESH_TX_COMPLETE:
-        WICED_BT_TRACE("tx complete status:%d\n", p_event->tx_status);
+        WICED_BT_TRACE("tx complete status:%d\n", p_event->status.tx_flag);
         wiced_bt_mesh_send_hci_tx_complete(p_hci_event, p_event);
         break;
 
@@ -1174,8 +1161,7 @@ uint32_t mesh_app_proc_rx_cmd(uint16_t opcode, uint8_t *p_data, uint32_t length)
 
     case HCI_CONTROL_MESH_COMMAND_RAW_MODEL_DATA:
         status = mesh_provisioner_process_raw_model_data(p_event, p_data, length);
-        mesh_provisioner_hci_send_status(status);
-        return WICED_TRUE;
+        break;
 
     default:
         wiced_bt_mesh_release_event(p_event);
@@ -1252,7 +1238,7 @@ uint8_t mesh_provisioner_process_set_dev_key(uint8_t *p_data, uint32_t length)
     return HCI_CONTROL_MESH_STATUS_SUCCESS;
 }
 
-uint8_t mesh_provisioner_process_add_vendor_model(uint8_t *p_data, uint32_t length)
+uint8_t mesh_provisioner_process_add_vendor_model(uint8_t* p_data, uint32_t length)
 {
     uint16_t company_id;
     uint16_t model_id;
@@ -1328,7 +1314,7 @@ extern void mesh_vendor_client_process_data(wiced_bt_mesh_event_t *p_event, uint
  * was able to process the message, and FALSE if the message is unknown.  In the latter case the core
  * will call other registered models.
  */
-wiced_bool_t mesh_vendor_client_message_handler(wiced_bt_mesh_event_t *p_event,  const uint8_t *p_data, uint16_t data_len)
+wiced_bool_t mesh_vendor_client_message_handler(wiced_bt_mesh_event_t *p_event,  uint8_t *p_data, uint16_t data_len)
 {
     uint8_t i = 0;
     uint8_t j = 0;
@@ -1373,7 +1359,7 @@ wiced_bool_t mesh_vendor_client_message_handler(wiced_bt_mesh_event_t *p_event, 
         return WICED_FALSE;
     }
 
-    mesh_vendor_client_process_data(p_event, (uint8_t*) p_data, data_len);
+    mesh_vendor_client_process_data(p_event, p_data, data_len);
     return WICED_TRUE;
 }
 

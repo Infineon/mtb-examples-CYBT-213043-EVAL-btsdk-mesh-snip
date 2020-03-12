@@ -68,7 +68,6 @@ extern wiced_bt_cfg_settings_t wiced_bt_cfg_settings;
  ******************************************************/
 #define MESH_PID                        0x301E
 #define MESH_VID                        0x0002
-#define MESH_FWID                       0x301E000101010001
 #define MESH_CACHE_REPLAY_SIZE          0x0008
 
 /******************************************************
@@ -98,7 +97,8 @@ static uint8_t mesh_provisioner_process_oob_value(uint8_t *p_data, uint32_t leng
  *          Variables Definitions
  ******************************************************/
 // Use hardcoded PTS default priv key. In real app it will be generated once and written into OTP memory
-uint8_t pb_priv_key[WICED_BT_MESH_PROVISION_PRIV_KEY_LEN] = { 0x52, 0x9A, 0xA0, 0x67, 0x0D, 0x72, 0xCD, 0x64, 0x97, 0x50, 0x2E, 0xD4, 0x73, 0x50, 0x2B, 0x03, 0x7E, 0x88, 0x03, 0xB5, 0xC6, 0x08, 0x29, 0xA5, 0xA3, 0xCA, 0xA2, 0x19, 0x50, 0x55, 0x30, 0xBA };
+// See mesh_app_lib/mesh_application.c
+extern uint8_t pb_priv_key[];
 
 static void mesh_provisioner_hci_send_status(uint8_t status);
 
@@ -145,7 +145,6 @@ wiced_bt_mesh_core_config_t  mesh_config =
     .company_id         = MESH_COMPANY_ID_CYPRESS,                  // Company identifier assigned by the Bluetooth SIG
     .product_id         = MESH_PID,                                 // Vendor-assigned product identifier
     .vendor_id          = MESH_VID,                                 // Vendor-assigned product version identifier
-    .firmware_id        = MESH_FWID,                                // Vendor-assigned firmware version identifier
     .replay_cache_size  = MESH_CACHE_REPLAY_SIZE,                   // Number of replay protection entries, i.e. maximum number of mesh devices that can send application messages to this device.
 #if defined(LOW_POWER_NODE) && (LOW_POWER_NODE == 1)
     .features           = WICED_BT_MESH_CORE_FEATURE_BIT_LOW_POWER, // A bit field indicating the device features. In Low Power mode no Relay, no Proxy and no Friend

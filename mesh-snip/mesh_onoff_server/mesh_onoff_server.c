@@ -62,7 +62,6 @@ extern wiced_bt_cfg_settings_t wiced_bt_cfg_settings;
  ******************************************************/
 #define MESH_PID                0x3016
 #define MESH_VID                0x0002
-#define MESH_FWID               0x3016000101010001
 #define MESH_CACHE_REPLAY_SIZE  0x0008
 
 /******************************************************
@@ -204,7 +203,6 @@ wiced_bt_mesh_core_config_t  mesh_config =
     .company_id         = MESH_COMPANY_ID_CYPRESS,                  // Company identifier assigned by the Bluetooth SIG
     .product_id         = MESH_PID,                                 // Vendor-assigned product identifier
     .vendor_id          = MESH_VID,                                 // Vendor-assigned product version identifier
-    .firmware_id        = MESH_FWID,                                // Vendor-assigned firmware version identifier
     .replay_cache_size  = MESH_CACHE_REPLAY_SIZE,                   // Number of replay protection entries, i.e. maximum number of mesh devices that can send application messages to this device.
 #if defined(LOW_POWER_NODE) && (LOW_POWER_NODE == 1)
     .features           = WICED_BT_MESH_CORE_FEATURE_BIT_LOW_POWER, // A bit field indicating the device features. In Low Power mode no Relay, no Proxy and no Friend
@@ -268,14 +266,13 @@ mesh_onoff_server_t app_state;
 void mesh_app_init(wiced_bool_t is_provisioned)
 {
 #if 0
-    extern uint8_t wiced_bt_mesh_model_trace_enabled;
-    wiced_bt_mesh_model_trace_enabled = WICED_TRUE;
+    // Set Debug trace level for mesh_models_lib and mesh_provisioner_lib
+    wiced_bt_mesh_models_set_trace_level(WICED_BT_MESH_CORE_TRACE_INFO);
 #endif
 #if 0
-    // enable core trace
-    extern void wiced_bt_mesh_core_set_trace_level(uint32_t fids_mask, uint8_t level);
-    wiced_bt_mesh_core_set_trace_level(0xffffffff, 4);      //(ALL, TRACE_DEBUG)
-    wiced_bt_mesh_core_set_trace_level(0x4, 3);             //(CORE_AES_CCM_C, TRACE_INFO)
+    // Set Debug trace level for all modules but Info level for CORE_AES_CCM module
+    wiced_bt_mesh_core_set_trace_level(WICED_BT_MESH_CORE_TRACE_FID_ALL, WICED_BT_MESH_CORE_TRACE_DEBUG);
+    wiced_bt_mesh_core_set_trace_level(WICED_BT_MESH_CORE_TRACE_FID_CORE_AES_CCM, WICED_BT_MESH_CORE_TRACE_INFO);
 #endif
 
     wiced_bt_cfg_settings.device_name = (uint8_t *)"OnOff Server";

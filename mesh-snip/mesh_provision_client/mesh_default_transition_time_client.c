@@ -87,7 +87,7 @@ void mesh_default_transition_time_client_message_handler(uint16_t event, wiced_b
     switch (event)
     {
     case WICED_BT_MESH_TX_COMPLETE:
-        WICED_BT_TRACE("tx complete status:%d\n", p_event->tx_status);
+        WICED_BT_TRACE("tx complete status:%d\n", p_event->status.tx_flag);
 #if defined HCI_CONTROL
         if ((p_hci_event = wiced_bt_mesh_create_hci_event(p_event)) != NULL)
             wiced_bt_mesh_send_hci_tx_complete(p_hci_event, p_event);
