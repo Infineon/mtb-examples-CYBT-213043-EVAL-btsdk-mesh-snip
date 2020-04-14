@@ -83,7 +83,7 @@ void mesh_vendor_client_process_data(wiced_bt_mesh_event_t *p_event, uint8_t *p_
 #if defined HCI_CONTROL
     wiced_bt_mesh_hci_event_t *p_hci_event;
 #endif
-    WICED_BT_TRACE("vs process data from:%04x len:%d\n", p_event->src, data_len);
+    WICED_BT_TRACE("vs process data from:%04x opcode: %x len:%d\n", p_event->src, p_event->opcode, data_len);
 
     // Because the same app publishes and subscribes the same model, it will receive messages that it
     //sent out.

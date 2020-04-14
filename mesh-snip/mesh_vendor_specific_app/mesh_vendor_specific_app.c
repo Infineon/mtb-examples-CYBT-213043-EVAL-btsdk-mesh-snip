@@ -49,6 +49,7 @@
 #endif
 #include "mesh_vendor_specific_app.h"
 
+#include "wiced_memory.h"
 #include "wiced_bt_cfg.h"
 extern wiced_bt_cfg_settings_t wiced_bt_cfg_settings;
 
@@ -140,7 +141,7 @@ wiced_bt_mesh_core_config_t  mesh_config =
     .features           = WICED_BT_MESH_CORE_FEATURE_BIT_FRIEND | WICED_BT_MESH_CORE_FEATURE_BIT_RELAY | WICED_BT_MESH_CORE_FEATURE_BIT_GATT_PROXY_SERVER,   // In Friend mode support friend, relay
     .friend_cfg         =                                           // Configuration of the Friend Feature(Receive Window in Ms, messages cache)
     {
-        .receive_window        = 200,
+        .receive_window        = 20,
         .cache_buf_len         = 300,                               // Length of the buffer for the cache
         .max_lpn_num           = 4                                  // Max number of Low Power Nodes with established friendship. Must be > 0 if Friend feature is supported.
     },
@@ -178,6 +179,23 @@ wiced_bt_mesh_app_func_table_t wiced_bt_mesh_app_func_table =
  ******************************************************/
 void mesh_app_init(wiced_bool_t is_provisioned)
 {
+#if 0
+    // Set Debug trace level for mesh_models_lib and mesh_provisioner_lib
+    wiced_bt_mesh_models_set_trace_level(WICED_BT_MESH_CORE_TRACE_INFO);
+#endif
+#if 0
+    // Set Debug trace level for all modules but Info level for CORE_AES_CCM module
+    wiced_bt_mesh_core_set_trace_level(WICED_BT_MESH_CORE_TRACE_FID_ALL, WICED_BT_MESH_CORE_TRACE_DEBUG);
+    wiced_bt_mesh_core_set_trace_level(WICED_BT_MESH_CORE_TRACE_FID_CORE_AES_CCM, WICED_BT_MESH_CORE_TRACE_INFO);
+#endif
+
+#if 0
+    // App can set TX power here. 0 means minimum power nad 4 is the max. Actual power table is on the controller.
+    extern uint8_t wiced_bt_mesh_core_adv_tx_power;
+    WICED_BT_TRACE("tx_power:%d to 0\n", wiced_bt_mesh_core_adv_tx_power);
+    wiced_bt_mesh_core_adv_tx_power = 0;
+#endif
+
     WICED_BT_TRACE("app_init provisioned:%d\n", is_provisioned);
 
     wiced_bt_cfg_settings.device_name = (uint8_t *)"Vendor Server";
@@ -221,6 +239,7 @@ wiced_bool_t mesh_vendor_server_message_handler(wiced_bt_mesh_event_t *p_event, 
         {
         case MESH_VENDOR_OPCODE1:
         case MESH_VENDOR_OPCODE2:
+            p_event->status.rpl_delay = 0;      // Update RPL immediately so that message cannot be replayed
             break;
         default:
             return WICED_FALSE;
@@ -262,6 +281,7 @@ uint16_t mesh_vendor_server_scene_recall_handler(uint8_t element_idx, uint8_t *p
 
 void mesh_vendor_server_process_data(wiced_bt_mesh_event_t *p_event, uint8_t *p_data, uint16_t data_len)
 {
+    uint8_t *p_buffer = NULL;
 #if defined HCI_CONTROL
     wiced_bt_mesh_hci_event_t *p_hci_event;
 #endif
@@ -278,8 +298,16 @@ void mesh_vendor_server_process_data(wiced_bt_mesh_event_t *p_event, uint8_t *p_
 #endif
     if (p_event->opcode == MESH_VENDOR_OPCODE1)
     {
-        // return the data that we received in the command.  Real app can send anything it wants.
-        mesh_vendor_server_send_data(wiced_bt_mesh_create_reply_event(p_event), MESH_VENDOR_OPCODE2, p_data, data_len);
+        // This application returns the data that it received in the command plus TTL value. The Client can figure out number of hops based on that.
+        // Real app can send anything it wants.
+        if ((p_buffer = (uint8_t*)wiced_bt_get_buffer(data_len + 1)) != NULL)
+        {
+            memcpy(p_buffer, p_data, data_len);
+            p_buffer[data_len] = (uint8_t)p_event->ttl;
+
+            mesh_vendor_server_send_data(wiced_bt_mesh_create_reply_event(p_event), MESH_VENDOR_OPCODE2, p_buffer, data_len +1);
+            wiced_bt_free_buffer( p_buffer );
+        }
     }
     else
     {

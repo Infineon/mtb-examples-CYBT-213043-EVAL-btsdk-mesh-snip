@@ -158,6 +158,7 @@ static void mesh_config_client_message_handler(uint16_t event, wiced_bt_mesh_eve
 static uint8_t mesh_provisioner_process_set_local_device(uint8_t *p_data, uint32_t length);
 static uint8_t mesh_provisioner_process_add_vendor_model(uint8_t *p_data, uint32_t length);
 static uint8_t mesh_provisioner_process_set_dev_key(uint8_t *p_data, uint32_t length);
+static uint8_t mesh_provisioner_process_set_adv_tx_power(uint8_t *p_data, uint32_t length);
 static uint8_t mesh_provisioner_process_connect(wiced_bt_mesh_event_t *p_event, uint8_t *p_data, uint32_t length);
 static uint8_t mesh_provisioner_process_disconnect(wiced_bt_mesh_event_t *p_event, uint8_t *p_data, uint32_t length);
 static uint8_t mesh_provisioner_process_start(wiced_bt_mesh_event_t *p_event, uint8_t *p_data, uint32_t length);
@@ -262,6 +263,8 @@ uint8_t mesh_model_num[WICED_BT_MESH_PROPERTY_LEN_DEVICE_MODEL_NUMBER]     = { '
 uint8_t mesh_system_id[8]                                                  = { 0xbb, 0xb8, 0xa1, 0x80, 0x5f, 0x9f, 0x91, 0x71 };
 
 extern wiced_transport_buffer_pool_t* host_trans_pool;
+// Application can change TX power. 0 is the minimum
+extern uint8_t wiced_bt_mesh_core_adv_tx_power;
 
 /*
 * Structure to save vendor-specific model data
@@ -434,6 +437,12 @@ void mesh_app_init(wiced_bool_t is_provisioned)
     // Set Debug trace level for all modules but Info level for CORE_AES_CCM module
     wiced_bt_mesh_core_set_trace_level(WICED_BT_MESH_CORE_TRACE_FID_ALL, WICED_BT_MESH_CORE_TRACE_DEBUG);
     wiced_bt_mesh_core_set_trace_level(WICED_BT_MESH_CORE_TRACE_FID_CORE_AES_CCM, WICED_BT_MESH_CORE_TRACE_INFO);
+#endif
+
+#if 0
+    // Application can change TX power. 0 is the minimum
+    WICED_BT_TRACE("tx_power:%d to 0\n", wiced_bt_mesh_core_adv_tx_power);
+    wiced_bt_mesh_core_adv_tx_power = 0;
 #endif
 
     wiced_bt_cfg_settings.device_name = (uint8_t *)"Provisioner Client";
@@ -740,7 +749,7 @@ void mesh_config_client_message_handler(uint16_t event, wiced_bt_mesh_event_t *p
  */
 uint32_t mesh_app_proc_rx_cmd(uint16_t opcode, uint8_t *p_data, uint32_t length)
 {
-    wiced_bt_mesh_event_t *p_event;
+    wiced_bt_mesh_event_t *p_event = NULL;
     uint8_t status = HCI_CONTROL_MESH_STATUS_SUCCESS;
 
     WICED_BT_TRACE("%s opcode:%x\n", __FUNCTION__, opcode);
@@ -829,6 +838,11 @@ uint32_t mesh_app_proc_rx_cmd(uint16_t opcode, uint8_t *p_data, uint32_t length)
         status = mesh_provisioner_process_proxy_disconnect(p_data, length);
         mesh_provisioner_hci_send_status(status);
         return WICED_TRUE;
+
+    case HCI_CONTROL_MESH_COMMAND_SET_ADV_TX_POWER:
+        status = mesh_provisioner_process_set_adv_tx_power(p_data, length);
+        mesh_provisioner_hci_send_status(status);
+        break;
 
     case HCI_CONTROL_MESH_COMMAND_PROVISION_SCAN_CAPABILITIES_GET:
     case HCI_CONTROL_MESH_COMMAND_PROVISION_SCAN_GET:
@@ -1226,6 +1240,28 @@ uint8_t mesh_provisioner_process_set_local_device(uint8_t *p_data, uint32_t leng
 }
 
 /*
+* Process command from MCU to set ADV Tx Power.
+* 0: MULTI_ADV_TX_POWER_MIN is the minimum
+* 4: MULTI_ADV_TX_POWER_MAX is the maximum
+*/
+uint8_t mesh_provisioner_process_set_adv_tx_power(uint8_t *p_data, uint32_t length)
+{
+    uint8_t adv_tx_power = 0;
+
+    if (length == 1)
+    {
+        STREAM_TO_UINT8(adv_tx_power, p_data);
+
+        if ( adv_tx_power >= MULTI_ADV_TX_POWER_MIN && adv_tx_power <= MULTI_ADV_TX_POWER_MAX)
+        {
+            wiced_bt_mesh_core_adv_tx_power = adv_tx_power;
+            return HCI_CONTROL_MESH_STATUS_SUCCESS;
+        }
+    }
+    return HCI_CONTROL_MESH_STATUS_ERROR;
+}
+
+/*
 * Process command from MCU to set device key.  MCU can set device key once and then perform multiple configuration commands.
 */
 uint8_t mesh_provisioner_process_set_dev_key(uint8_t *p_data, uint32_t length)
@@ -1240,6 +1276,7 @@ uint8_t mesh_provisioner_process_set_dev_key(uint8_t *p_data, uint32_t length)
 
 uint8_t mesh_provisioner_process_add_vendor_model(uint8_t* p_data, uint32_t length)
 {
+    uint8_t element_index;
     uint16_t company_id;
     uint16_t model_id;
     uint8_t i = 0;
@@ -1254,9 +1291,15 @@ uint8_t mesh_provisioner_process_add_vendor_model(uint8_t* p_data, uint32_t leng
 
     // Find empty block to add vendor model
     wiced_bool_t b_found = WICED_FALSE;
-    for(i = 0; i < MESH_APP_NUM_MODELS; i++)
+    for (i = 0; i < MESH_APP_NUM_MODELS; i++)
     {
-        if(mesh_element1_models[i].company_id != MESH_COMPANY_ID_UNUSED)
+        if ((mesh_element1_models[i].company_id == company_id) && (mesh_element1_models[i].model_id == model_id))
+        {
+            WICED_BT_TRACE("mesh_provisioner_process_add_vendor_model: model_id: %d already exists\n", model_id);
+            return HCI_CONTROL_MESH_STATUS_ERROR;
+        }
+
+        if (mesh_element1_models[i].company_id != MESH_COMPANY_ID_UNUSED)
             continue;
 
         b_found = WICED_TRUE;
@@ -1265,23 +1308,29 @@ uint8_t mesh_provisioner_process_add_vendor_model(uint8_t* p_data, uint32_t leng
         break;
     }
 
-    if(!b_found)
+    if (!b_found)
+    {
+        WICED_BT_TRACE("mesh_provisioner_process_add_vendor_model: no empty block found in mesh_element1_models\n");
         return HCI_CONTROL_MESH_STATUS_ERROR;
+    }
 
-    uint8_t element_index = i;
+    element_index = i;
 
     // Find empty block for vendor model data
     b_found = WICED_FALSE;
-    for(i = 0; i < MESH_APP_MESH_MAX_VENDOR_MODELS; i++)
+    for (i = 0; i < MESH_APP_MESH_MAX_VENDOR_MODELS; i++)
     {
-        if(vendor_model_data[i].company_id)
+        if (vendor_model_data[i].company_id)
             continue;
         b_found = WICED_TRUE;
         break;
     }
 
-    if(!b_found)
+    if (!b_found)
+    {
+        WICED_BT_TRACE("mesh_provisioner_process_add_vendor_model: no empty block found in vendor_model_data\n");
         return HCI_CONTROL_MESH_STATUS_ERROR;
+    }
 
     //know where the element data is stored
     vendor_model_data[i].element_index = element_index;
@@ -1290,17 +1339,20 @@ uint8_t mesh_provisioner_process_add_vendor_model(uint8_t* p_data, uint32_t leng
     vendor_model_data[i].num_opcodes = num_opcodes;
     vendor_model_data[i].p_opcodes = NULL;
 
-    if(num_opcodes)
+    if (num_opcodes)
     {
         // each vendor specific opcode is 3-bytes long
         uint8_t* p_opcodes = wiced_bt_get_buffer(num_opcodes * 3);
-        if(p_opcodes)
+        if (p_opcodes)
         {
             vendor_model_data[i].p_opcodes = p_opcodes;
             STREAM_TO_ARRAY(vendor_model_data[i].p_opcodes, p_data, num_opcodes * 3);
         }
         else
+        {
+            WICED_BT_TRACE("mesh_provisioner_process_add_vendor_model: could not allocate buffer for p_opcodes\n");
             return HCI_CONTROL_MESH_STATUS_ERROR;
+        }
     }
 
     return HCI_CONTROL_MESH_STATUS_SUCCESS;
@@ -1326,32 +1378,31 @@ wiced_bool_t mesh_vendor_client_message_handler(wiced_bt_mesh_event_t *p_event, 
     // model_id 0xffff means request to check if that opcode belongs to that model
     if (p_event->model_id == 0xffff)
     {
-        for(i = 0; i < MESH_APP_MESH_MAX_VENDOR_MODELS; i++)
+        for (i = 0; i < MESH_APP_MESH_MAX_VENDOR_MODELS; i++)
         {
-            if(vendor_model_data[i].company_id == p_event->company_id)
+            if (vendor_model_data[i].company_id == p_event->company_id)
             {
                 p_op = vendor_model_data[i].p_opcodes;
                 num_opcodes = vendor_model_data[i].num_opcodes;
-                if(num_opcodes)
+                if (num_opcodes && (p_op != NULL))
                 {
-                    if(p_op)
+                    for (j = 0; j < num_opcodes; j++)
                     {
-                        for(j = 0; j < num_opcodes; j++)
+                        // first byte is the opcode
+                        if (p_op[0] == p_event->opcode)
                         {
-                            // first byte is the opcode
-                            if(p_op[0] == p_event->opcode)
-                            {
-                                p_event->model_id = vendor_model_data[i].model_id;
-                                return WICED_TRUE;
-                            }
-                            else
-                                p_op += 3;
+                            p_event->model_id = vendor_model_data[i].model_id;
+                            p_event->status.rpl_delay = 0;      // Update RPL immediately so that message cannot be replayed
+                            return WICED_TRUE;
                         }
+                        else
+                            p_op += 3;
                     }
                 }
                 else
                 {
                     p_event->model_id = vendor_model_data[i].model_id;
+                    p_event->status.rpl_delay = 0;      // Update RPL immediately so that message cannot be replayed
                     return WICED_TRUE;
                 }
             }
