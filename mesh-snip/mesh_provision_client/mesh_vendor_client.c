@@ -44,6 +44,8 @@
 #include "wiced_bt_mesh_client.h"
 #include "wiced_bt_mesh_app.h"
 
+#include "wiced_memory.h"
+
 #ifdef HCI_CONTROL
 #include "wiced_transport.h"
 #include "hci_control_api.h"
@@ -66,6 +68,9 @@ static void mesh_vendor_hci_event_send_data(wiced_bt_mesh_hci_event_t *p_hci_eve
 /******************************************************
  *          Variables Definitions
  ******************************************************/
+
+uint64_t data_tx_timestamp = 0;
+
 /******************************************************
  *               Function Definitions
  ******************************************************/
@@ -82,6 +87,9 @@ void mesh_vendor_client_process_data(wiced_bt_mesh_event_t *p_event, uint8_t *p_
 {
 #if defined HCI_CONTROL
     wiced_bt_mesh_hci_event_t *p_hci_event;
+    uint32_t elapsed_time_ms = 0;
+    uint8_t *p_buffer = NULL;
+    uint8_t *p = NULL;
 #endif
     WICED_BT_TRACE("vs process data from:%04x opcode: %x len:%d\n", p_event->src, p_event->opcode, data_len);
 
@@ -92,7 +100,20 @@ void mesh_vendor_client_process_data(wiced_bt_mesh_event_t *p_event, uint8_t *p_
 
 #if defined HCI_CONTROL
     if ((p_hci_event = wiced_bt_mesh_create_hci_event(p_event)) != NULL)
-        mesh_vendor_hci_event_send_data(p_hci_event, p_event->opcode, p_data, data_len);
+    {
+        if ((p_buffer = (uint8_t*)wiced_bt_get_buffer(data_len + 4)) != NULL)
+        {
+            elapsed_time_ms = (uint32_t) (wiced_bt_mesh_core_get_tick_count() - data_tx_timestamp);
+            memcpy(p_buffer, p_data, data_len);
+
+            p = p_buffer + data_len;
+            UINT32_TO_STREAM(p, elapsed_time_ms);
+
+            mesh_vendor_hci_event_send_data(p_hci_event, p_event->opcode, p_buffer, data_len + 4);
+            wiced_bt_free_buffer( p_buffer );
+        }
+    }
+
 #endif
     wiced_bt_mesh_release_event(p_event);
 }
@@ -121,6 +142,7 @@ uint32_t mesh_vendor_client_proc_rx_cmd(uint16_t opcode, uint8_t *p_data, uint32
 
     WICED_BT_TRACE("rx vs cmd company_id:%04x model_id:%04x opcode:%02x handler:%x\n", p_event->company_id, p_event->model_id, cmd_opcode, mesh_vendor_client_message_handler);
 
+    data_tx_timestamp = wiced_bt_mesh_core_get_tick_count();
     mesh_vendor_client_send_data(p_event, cmd_opcode, p_data, length - 5);
     return WICED_TRUE;
 }

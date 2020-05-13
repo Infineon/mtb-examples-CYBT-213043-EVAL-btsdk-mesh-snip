@@ -86,7 +86,7 @@ static uint32_t mesh_app_proc_rx_cmd(uint16_t opcode, uint8_t *p_data, uint32_t 
 static void mesh_provision_server_message_handler(uint16_t event, void *p_data);
 static void mesh_provision_server_oob_configure(uint8_t *p_data, uint32_t length);
 static void mesh_provision_server_process_oob_get(wiced_bt_mesh_provision_device_oob_request_data_t *p_data);
-static void mesh_provisioner_hci_event_device_get_oob_data_send(wiced_bt_mesh_provision_device_oob_request_data_t *p_oob_data);
+static void mesh_provisioner_hci_event_device_get_oob_data_send(wiced_bt_mesh_provision_device_oob_request_data_t *p_oob_data, uint8_t* oob_data);
 static uint8_t mesh_provisioner_process_oob_value(uint8_t *p_data, uint32_t length);
 
 #ifdef HCI_CONTROL
@@ -320,7 +320,8 @@ void mesh_provision_server_oob_configure(uint8_t *p_data, uint32_t length)
 
 void mesh_provision_server_process_oob_get(wiced_bt_mesh_provision_device_oob_request_data_t *p_data)
 {
-    wiced_bt_mesh_provision_oob_value_data_t oob;
+    uint8_t oob_data[8];
+    uint8_t oob_data_size;
     int i;
     uint32_t max_value;
     uint32_t rand = wiced_hal_rand_gen_num();
@@ -329,75 +330,79 @@ void mesh_provision_server_process_oob_get(wiced_bt_mesh_provision_device_oob_re
     if (p_data->type == WICED_BT_MESH_PROVISION_GET_OOB_TYPE_DISPLAY_OUTPUT)
     {
         // sanity check.  max should be less or equal to 8
-        oob.data_size = (p_data->size > 8) ? 8 : p_data->size;
+        oob_data_size = (p_data->size > 8) ? 8 : p_data->size;
 
         // Generate output depending on the action
         switch (p_data->action)
         {
         case WICED_BT_MESH_PROVISION_OUT_OOB_ACT_DISP_NUM:
-            for (i = 0; i < oob.data_size; i++)
+            for (i = 0; i < oob_data_size; i++)
             {
                 uint32_t rand = wiced_hal_rand_gen_num();
-                oob.data[i] = (rand % 9);
-                WICED_BT_TRACE("%d %d", rand, oob.data[i]);
+                oob_data[i] = (rand % 9);
+                WICED_BT_TRACE("%d", oob_data[i]);
             }
             WICED_BT_TRACE("\n");
+            mesh_provisioner_hci_event_device_get_oob_data_send(p_data, oob_data);
             break;
 
         case WICED_BT_MESH_PROVISION_OUT_OOB_ACT_DISP_ALPH:
-            for (i = 0; i < oob.data_size; )
+            for (i = 0; i < oob_data_size; )
             {
-                oob.data[i] = (wiced_hal_rand_gen_num() % 'Z');
-                if (((oob.data[i] > '0') && (oob.data[i] <= '9')) ||
-                    ((oob.data[i] > 'A') && (oob.data[i] <= 'Z')))
+                oob_data[i] = (wiced_hal_rand_gen_num() % 'Z');
+                if (((oob_data[i] > '0') && (oob_data[i] <= '9')) ||
+                    ((oob_data[i] > 'A') && (oob_data[i] <= 'Z')))
                 {
-                    WICED_BT_TRACE("%c", oob.data[i]);
+                    WICED_BT_TRACE("%c", oob_data[i]);
                     i++;
                 }
             }
-            WICED_BT_TRACE("\n", oob.data[i]);
+            WICED_BT_TRACE("\n");
             break;
         default:
         //case WICED_BT_MESH_PROVISION_OUT_OOB_ACT_BLINK:
         //case WICED_BT_MESH_PROVISION_OUT_OOB_ACT_BEEP:
         //case WICED_BT_MESH_PROVISION_OUT_OOB_ACT_VIBRATE:
-            oob.data[0] = (wiced_hal_rand_gen_num() % 8) + 1;
-            WICED_BT_TRACE("%d\n", oob.data[0]);
-            oob.data_size = 1;
+            oob_data[0] = (wiced_hal_rand_gen_num() % 8) + 1;
+            WICED_BT_TRACE("%d\n", oob_data[0]);
+            oob_data_size = 1;
             break;
         }
-        // oob.conn_id = p_data->conn_id;
-        wiced_bt_mesh_provision_set_oob(&oob);
+        wiced_bt_mesh_provision_set_oob(oob_data, oob_data_size);
     }
     else if (p_data->type == WICED_BT_MESH_PROVISION_GET_OOB_TYPE_ENTER_INPUT)
     {
-        mesh_provisioner_hci_event_device_get_oob_data_send(p_data);
+        mesh_provisioner_hci_event_device_get_oob_data_send(p_data, NULL);
     }
     else if (p_data->type == WICED_BT_MESH_PROVISION_GET_OOB_TYPE_GET_STATIC)
     {
-        // oob.conn_id = p_data->conn_id;
-        memcpy(oob.data, app_state.static_oob, sizeof(app_state.static_oob));
-        oob.data_size = sizeof(app_state.static_oob);
-        wiced_bt_mesh_provision_set_oob(&oob);
+        wiced_bt_mesh_provision_set_oob(app_state.static_oob, sizeof(app_state.static_oob));
     }
 }
 
 /*
  * Send to the MCU Out of Band data request
  */
-void mesh_provisioner_hci_event_device_get_oob_data_send(wiced_bt_mesh_provision_device_oob_request_data_t *p_oob_data)
+void mesh_provisioner_hci_event_device_get_oob_data_send(wiced_bt_mesh_provision_device_oob_request_data_t *p_oob_data, uint8_t *oob_data)
 {
-    uint8_t *p_buffer = wiced_transport_allocate_buffer(host_trans_pool);
-    uint8_t *p = p_buffer;
+    wiced_bt_mesh_hci_event_t* p_hci_event = wiced_bt_mesh_create_hci_event(NULL);
+    uint8_t* p = p_hci_event->data;
+    if (p_hci_event == NULL)
+    {
+        WICED_BT_TRACE("get oob data no mem\n");
+        return;
+    }
 
-    WICED_BT_TRACE("mesh prov oob req type:%d\n", /*p_oob_data->conn_id, */p_oob_data->type);
+    WICED_BT_TRACE("mesh prov oob req type:%d\n", p_oob_data->type);
 
     UINT16_TO_STREAM(p, p_oob_data->provisioner_addr);
     UINT8_TO_STREAM(p, p_oob_data->type);
     UINT8_TO_STREAM(p, p_oob_data->size);
     UINT8_TO_STREAM(p, p_oob_data->action);
+    memcpy(p, oob_data, p_oob_data->size);
+    p += p_oob_data->size;
 
-    mesh_transport_send_data(HCI_CONTROL_MESH_EVENT_PROVISION_OOB_DATA, p_buffer, (uint16_t)(p - p_buffer));
+    mesh_transport_send_data(HCI_CONTROL_MESH_EVENT_PROVISION_OOB_DATA, (uint8_t *)p_hci_event, (uint16_t)(p - (uint8_t *)p_hci_event));
 }
 
 void mesh_provisioner_hci_send_status(uint8_t status)
@@ -415,10 +420,8 @@ void mesh_provisioner_hci_send_status(uint8_t status)
  */
 uint8_t mesh_provisioner_process_oob_value(uint8_t *p_data, uint32_t length)
 {
-    wiced_bt_mesh_provision_oob_value_data_t oob;
+    uint8_t oob_len;
+    STREAM_TO_UINT8(oob_len, p_data);
 
-    STREAM_TO_UINT8(oob.data_size, p_data);
-    STREAM_TO_ARRAY(oob.data, p_data, length);
-
-    return wiced_bt_mesh_provision_set_oob(&oob) ? HCI_CONTROL_MESH_STATUS_SUCCESS : HCI_CONTROL_MESH_STATUS_ERROR;
+    return wiced_bt_mesh_provision_set_oob(p_data, oob_len) ? HCI_CONTROL_MESH_STATUS_SUCCESS : HCI_CONTROL_MESH_STATUS_ERROR;
 }

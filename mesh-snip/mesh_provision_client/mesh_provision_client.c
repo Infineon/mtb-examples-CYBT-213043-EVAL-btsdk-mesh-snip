@@ -144,7 +144,7 @@ wiced_bool_t mesh_gatt_client_local_device_set(wiced_bt_mesh_local_device_set_da
 #define MESH_PID                0x301D
 #define MESH_VID                0x0002
 #define MESH_CACHE_REPLAY_SIZE  200
-
+#define MESH_APP_RPL_DELAY      30        // Value is seconds. Use RPL = 0 to update immediately so that message cannot be replayed
 /******************************************************
  *          Structures
  ******************************************************/
@@ -440,7 +440,7 @@ void mesh_app_init(wiced_bool_t is_provisioned)
 #endif
 
 #if 0
-    // Application can change TX power. 0 is the minimum
+    // App can set TX power here. 0 means minimum power and 4 is the max. Actual power table is on the controller.
     WICED_BT_TRACE("tx_power:%d to 0\n", wiced_bt_mesh_core_adv_tx_power);
     wiced_bt_mesh_core_adv_tx_power = 0;
 #endif
@@ -1252,7 +1252,7 @@ uint8_t mesh_provisioner_process_set_adv_tx_power(uint8_t *p_data, uint32_t leng
     {
         STREAM_TO_UINT8(adv_tx_power, p_data);
 
-        if ( adv_tx_power >= MULTI_ADV_TX_POWER_MIN && adv_tx_power <= MULTI_ADV_TX_POWER_MAX)
+        if (adv_tx_power <= MULTI_ADV_TX_POWER_MAX)
         {
             wiced_bt_mesh_core_adv_tx_power = adv_tx_power;
             return HCI_CONTROL_MESH_STATUS_SUCCESS;
@@ -1392,7 +1392,7 @@ wiced_bool_t mesh_vendor_client_message_handler(wiced_bt_mesh_event_t *p_event, 
                         if (p_op[0] == p_event->opcode)
                         {
                             p_event->model_id = vendor_model_data[i].model_id;
-                            p_event->status.rpl_delay = 0;      // Update RPL immediately so that message cannot be replayed
+                            p_event->status.rpl_delay = MESH_APP_RPL_DELAY;
                             return WICED_TRUE;
                         }
                         else
@@ -1402,7 +1402,7 @@ wiced_bool_t mesh_vendor_client_message_handler(wiced_bt_mesh_event_t *p_event, 
                 else
                 {
                     p_event->model_id = vendor_model_data[i].model_id;
-                    p_event->status.rpl_delay = 0;      // Update RPL immediately so that message cannot be replayed
+                    p_event->status.rpl_delay = MESH_APP_RPL_DELAY;
                     return WICED_TRUE;
                 }
             }
@@ -1534,12 +1534,7 @@ uint8_t mesh_provisioner_process_start(wiced_bt_mesh_event_t *p_event, uint8_t *
  */
 uint8_t mesh_provisioner_process_oob_value(wiced_bt_mesh_event_t *p_event, uint8_t *p_data, uint32_t length)
 {
-    wiced_bt_mesh_provision_oob_value_data_t oob;
-
-    STREAM_TO_UINT8(oob.data_size, p_data);
-    STREAM_TO_ARRAY(oob.data, p_data, length);
-
-    return wiced_bt_mesh_provision_client_set_oob(p_event, &oob) ? HCI_CONTROL_MESH_STATUS_SUCCESS : HCI_CONTROL_MESH_STATUS_ERROR;
+    return wiced_bt_mesh_provision_client_set_oob(p_event, p_data, length) ? HCI_CONTROL_MESH_STATUS_SUCCESS : HCI_CONTROL_MESH_STATUS_ERROR;
 }
 
 /*

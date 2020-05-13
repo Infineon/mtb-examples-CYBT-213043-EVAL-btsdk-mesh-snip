@@ -366,12 +366,3 @@ void mesh_time_set_hci_event_send(wiced_bt_mesh_hci_event_t *p_hci_event, RtcTim
 }
 
 #endif
-
-#ifdef CYW20706A2
-// Core initialization initializes the RTC calling wiced_bt_mesh_core_rtc_init() defined in app. It just should call rtc_init().
-// For that chip rtc_init should be called from application. Otherwise there is build error at link phase
-void wiced_bt_mesh_core_rtc_init(void)
-{
-    rtc_init();
-}
-#endif

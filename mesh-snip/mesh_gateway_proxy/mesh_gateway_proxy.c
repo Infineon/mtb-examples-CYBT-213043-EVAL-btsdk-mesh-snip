@@ -266,15 +266,6 @@ uint32_t mesh_app_proc_rx_cmd(uint16_t cmd_opcode, uint8_t *p_data, uint32_t dat
 
 #endif
 
-#if MESH_CHIP == 20703
-// Core initialization initializes the RTC calling wiced_bt_mesh_core_rtc_init() defined in app. It just should call rtc_init().
-// For that chip rtc_init should be called from application. Otherwise there is build error at link phase
-void wiced_bt_mesh_core_rtc_init(void)
-{
-    rtc_init();
-}
-#endif
-
 // Temporary dummy implementation of some functions to exclude fw_upgrade_lib.a from the build
 #if defined(CYW43012C0)
 #include "wiced_bt_ota_firmware_upgrade.h"
