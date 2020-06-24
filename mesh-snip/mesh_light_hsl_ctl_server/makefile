@@ -1,5 +1,5 @@
 #
-# Copyright 2020, Cypress Semiconductor Corporation or a subsidiary of
+# Copyright 2016-2020, Cypress Semiconductor Corporation or a subsidiary of
 # Cypress Semiconductor Corporation. All Rights Reserved.
 #
 # This software, including source code, documentation and related
@@ -144,7 +144,7 @@ CY_APP_DEFINES += -DPTS
 endif # PTS
 
 # Enable Mesh DFU support
-CY_APP_DEFINES += -DMESH_DFU_SUPPORTED
+#CY_APP_DEFINES += -DMESH_DFU_SUPPORTED
 
 # These flags control whether the prebuilt mesh libs (core, models)
 # will be the trace enabled versions or not

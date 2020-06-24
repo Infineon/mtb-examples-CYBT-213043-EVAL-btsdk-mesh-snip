@@ -1,5 +1,5 @@
 /*
-* Copyright 2020, Cypress Semiconductor Corporation or a subsidiary of
+* Copyright 2016-2020, Cypress Semiconductor Corporation or a subsidiary of
 * Cypress Semiconductor Corporation. All Rights Reserved.
 *
 * This software, including source code, documentation and related
@@ -39,6 +39,9 @@
 #include "wiced_bt_ble.h"
 #include "wiced_bt_gatt.h"
 #include "wiced_bt_mesh_models.h"
+#ifdef MESH_DFU_SUPPORTED
+#include "wiced_bt_mesh_dfu.h"
+#endif
 #include "wiced_bt_trace.h"
 #include "wiced_bt_mesh_app.h"
 
@@ -307,7 +310,7 @@ void mesh_app_init(wiced_bool_t is_provisioned)
     wiced_bt_mesh_model_onoff_server_init(MESH_ONOFF_SERVER_ELEMENT_INDEX, mesh_onoff_server_message_handler, TRANSITION_INTERVAL, is_provisioned);
 
 #ifdef MESH_DFU_SUPPORTED
-    wiced_bt_mesh_model_fw_update_server_init(MESH_ONOFF_SERVER_ELEMENT_INDEX, NULL, is_provisioned);
+    wiced_bt_mesh_model_fw_update_server_init(MESH_ONOFF_SERVER_ELEMENT_INDEX, is_provisioned);
     wiced_bt_mesh_model_fw_distribution_server_init();
     wiced_bt_mesh_model_blob_transfer_server_init(MESH_ONOFF_SERVER_ELEMENT_INDEX);
 #endif

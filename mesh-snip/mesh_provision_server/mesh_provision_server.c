@@ -1,5 +1,5 @@
 /*
- * Copyright 2020, Cypress Semiconductor Corporation or a subsidiary of
+ * Copyright 2016-2020, Cypress Semiconductor Corporation or a subsidiary of
  * Cypress Semiconductor Corporation. All Rights Reserved.
  *
  * This software, including source code, documentation and related
@@ -86,7 +86,7 @@ static uint32_t mesh_app_proc_rx_cmd(uint16_t opcode, uint8_t *p_data, uint32_t 
 static void mesh_provision_server_message_handler(uint16_t event, void *p_data);
 static void mesh_provision_server_oob_configure(uint8_t *p_data, uint32_t length);
 static void mesh_provision_server_process_oob_get(wiced_bt_mesh_provision_device_oob_request_data_t *p_data);
-static void mesh_provisioner_hci_event_device_get_oob_data_send(wiced_bt_mesh_provision_device_oob_request_data_t *p_oob_data, uint8_t* oob_data);
+static void mesh_provisioner_hci_event_device_get_oob_data_send(wiced_bt_mesh_provision_device_oob_request_data_t *p_oob_data, uint8_t *oob_data);
 static uint8_t mesh_provisioner_process_oob_value(uint8_t *p_data, uint32_t length);
 
 #ifdef HCI_CONTROL
@@ -399,9 +399,11 @@ void mesh_provisioner_hci_event_device_get_oob_data_send(wiced_bt_mesh_provision
     UINT8_TO_STREAM(p, p_oob_data->type);
     UINT8_TO_STREAM(p, p_oob_data->size);
     UINT8_TO_STREAM(p, p_oob_data->action);
-    memcpy(p, oob_data, p_oob_data->size);
-    p += p_oob_data->size;
-
+    if (oob_data != NULL)
+    {
+        memcpy(p, oob_data, p_oob_data->size);
+        p += p_oob_data->size;
+    }
     mesh_transport_send_data(HCI_CONTROL_MESH_EVENT_PROVISION_OOB_DATA, (uint8_t *)p_hci_event, (uint16_t)(p - (uint8_t *)p_hci_event));
 }
 
@@ -420,8 +422,5 @@ void mesh_provisioner_hci_send_status(uint8_t status)
  */
 uint8_t mesh_provisioner_process_oob_value(uint8_t *p_data, uint32_t length)
 {
-    uint8_t oob_len;
-    STREAM_TO_UINT8(oob_len, p_data);
-
-    return wiced_bt_mesh_provision_set_oob(p_data, oob_len) ? HCI_CONTROL_MESH_STATUS_SUCCESS : HCI_CONTROL_MESH_STATUS_ERROR;
+    return wiced_bt_mesh_provision_set_oob(p_data, length) ? HCI_CONTROL_MESH_STATUS_SUCCESS : HCI_CONTROL_MESH_STATUS_ERROR;
 }
