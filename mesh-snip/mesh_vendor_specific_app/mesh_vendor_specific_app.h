@@ -44,5 +44,3 @@
 // can define any opcodes it wants.
 #define MESH_VENDOR_OPCODE1             1
 #define MESH_VENDOR_OPCODE2             2
-#define MESH_VENDOR_OPCODE3             3   // Set ADV Tx Power
-#define MESH_VENDOR_OPCODE4             4   // Disable Network Retransmit

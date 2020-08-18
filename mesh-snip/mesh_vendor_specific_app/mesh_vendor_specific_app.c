@@ -176,8 +176,6 @@ wiced_bt_mesh_app_func_table_t wiced_bt_mesh_app_func_table =
 
 extern uint8_t wiced_bt_mesh_core_adv_tx_power;
 
-wiced_bool_t disable_ntwk_retransmit = FALSE;
-
 /******************************************************
  *               Function Definitions
  ******************************************************/
@@ -242,8 +240,6 @@ wiced_bool_t mesh_vendor_server_message_handler(wiced_bt_mesh_event_t *p_event, 
         {
         case MESH_VENDOR_OPCODE1:
         case MESH_VENDOR_OPCODE2:
-        case MESH_VENDOR_OPCODE3:
-        case MESH_VENDOR_OPCODE4:
             p_event->status.rpl_delay = MESH_APP_RPL_DELAY;
             break;
         default:
@@ -256,8 +252,6 @@ wiced_bool_t mesh_vendor_server_message_handler(wiced_bt_mesh_event_t *p_event, 
     {
     case MESH_VENDOR_OPCODE1:
     case MESH_VENDOR_OPCODE2:
-    case MESH_VENDOR_OPCODE3:
-    case MESH_VENDOR_OPCODE4:
         mesh_vendor_server_process_data(p_event, p_data, data_len);
         break;
 
@@ -288,8 +282,6 @@ uint16_t mesh_vendor_server_scene_recall_handler(uint8_t element_idx, uint8_t *p
 
 void mesh_vendor_server_process_data(wiced_bt_mesh_event_t *p_event, uint8_t *p_data, uint16_t data_len)
 {
-    uint8_t *p_buffer = NULL;
-    wiced_bt_mesh_event_t * p_reply_event = NULL;
 #if defined HCI_CONTROL
     wiced_bt_mesh_hci_event_t *p_hci_event;
 #endif
@@ -308,57 +300,10 @@ void mesh_vendor_server_process_data(wiced_bt_mesh_event_t *p_event, uint8_t *p_
 #endif
     if (p_event->opcode == MESH_VENDOR_OPCODE1)
     {
-        // This application returns the data that it received in the command plus TTL value. The Client can figure out number of hops based on that.
-        // Real app can send anything it wants.
-        if ((p_buffer = (uint8_t*)wiced_bt_get_buffer(data_len + 1)) != NULL)
-        {
-            memcpy(p_buffer, p_data, data_len);
-            p_buffer[data_len] = (uint8_t)p_event->ttl;
-
-            p_reply_event = wiced_bt_mesh_create_reply_event(p_event);
-
-            if(disable_ntwk_retransmit)
-                p_reply_event->retrans_cnt = 0x80;
-
-            mesh_vendor_server_send_data(p_reply_event, MESH_VENDOR_OPCODE2, p_buffer, data_len +1);
-            wiced_bt_free_buffer( p_buffer );
-        }
-    }
-    else if (p_event->opcode == MESH_VENDOR_OPCODE3) // adv tx power
-    {
-        if((data_len == 1) && p_data[0] <= 4)
-        {
-            wiced_bt_mesh_core_adv_tx_power  = p_data[0];
-
-            // This application returns the data that it received in the command plus TTL value. The Client can figure out number of hops based on that.
-            // Real app can send anything it wants.
-            if ((p_buffer = (uint8_t*)wiced_bt_get_buffer(data_len + 1)) != NULL)
-            {
-                memcpy(p_buffer, p_data, data_len);
-                p_buffer[data_len] = (uint8_t)p_event->ttl;
-
-                mesh_vendor_server_send_data(wiced_bt_mesh_create_reply_event(p_event), MESH_VENDOR_OPCODE3, p_buffer, data_len +1);
-                wiced_bt_free_buffer( p_buffer );
-            }
-        }
-    }
-    else if (p_event->opcode == MESH_VENDOR_OPCODE4)  // disable network retransmit
-    {
-        if((data_len == 1) && p_data[0] <= 4)
-        {
-            disable_ntwk_retransmit  = (wiced_bool_t) p_data[0];
-
-            // This application returns the data that it received in the command plus TTL value. The Client can figure out number of hops based on that.
-            // Real app can send anything it wants.
-            if ((p_buffer = (uint8_t*)wiced_bt_get_buffer(data_len + 1)) != NULL)
-            {
-                memcpy(p_buffer, p_data, data_len);
-                p_buffer[data_len] = (uint8_t)p_event->ttl;
-
-                mesh_vendor_server_send_data(wiced_bt_mesh_create_reply_event(p_event), MESH_VENDOR_OPCODE4, p_buffer, data_len +1);
-                wiced_bt_free_buffer( p_buffer );
-            }
-        }
+        // return the data that we received in the command.  Real app can send anything it wants.
+        if (data_len > 5)
+            data_len = 5;
+        mesh_vendor_server_send_data(wiced_bt_mesh_create_reply_event(p_event), MESH_VENDOR_OPCODE2, p_data, data_len);
     }
     else
     {
@@ -390,7 +335,7 @@ uint32_t mesh_app_proc_rx_cmd(uint16_t opcode, uint8_t *p_data, uint32_t length)
         WICED_BT_TRACE("app_proc_rx_cmd: no mem\n");
         return WICED_TRUE;
     }
-    mesh_vendor_server_send_data(p_event, cmd_opcode, p_data + 6, length - 6);
+    mesh_vendor_server_send_data(p_event, cmd_opcode, p_data + 10, length - 10);
     return WICED_TRUE;
 }
 
